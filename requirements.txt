@@ -1,7 +1,7 @@
-uvicorn==0.15.0
-fastapi==0.115.11
-numpy==2.2.3
-pydantic==2.8.2
-scikit-learn==1.6.1
+uvicorn
+fastapi
+numpy
+pydantic
+scikit-learn
 zipp
 tensorflow
