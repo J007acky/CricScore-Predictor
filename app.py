@@ -1,52 +1,40 @@
 from fastapi import FastAPI
-import pickle
-import numpy as np
-from pydantic import BaseModel
-from sklearn.preprocessing import StandardScaler
-import zipfile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import numpy as np
+import pickle
+import zipfile
+from sklearn.preprocessing import StandardScaler
 from tensorflow import keras
 
-
+# Initialize FastAPI app
 app = FastAPI()
 
-
-origins = [
-    "http://localhost.tiangolo.com",
-    "https://localhost.tiangolo.com",
-    "http://localhost",
-    "http://localhost:8000",
-    "http://127.0.0.1:52168",
-]
-
+# CORS configuration - allows requests from all origins (can be restricted later)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Consider restricting origins in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-
+# Extract the zipped Random Forest model if needed
 with zipfile.ZipFile('random_forest_model.zip', 'r') as zip_ref:
     zip_ref.extractall('./')
 
-
+# Load GNN (Deep Learning) model
 gnn_model = keras.models.load_model("gnn.keras")
 
-
-
-# Load the trained RandomForest model
+# Load Random Forest Regression model
 with open('random_forest_model.sav', 'rb') as file:
-    reg = pickle.load(file)
+    reg_model = pickle.load(file)
 
-# Load the trained StandardScaler
+# Load StandardScaler for input normalization
 with open('scaler.sav', 'rb') as file:
-    sc = pickle.load(file)
+    scaler = pickle.load(file)
 
-
-# Define request body format
+# Define expected input format using Pydantic
 class InputData(BaseModel):
     runs: int
     wickets: int
@@ -54,41 +42,30 @@ class InputData(BaseModel):
     striker: int
     nonStriker: int
 
+# Utility function to preprocess input data
+def preprocess_input(data: InputData):
+    input_array = np.array([[data.runs, data.wickets, data.over, data.striker, data.nonStriker]])
+    scaled_input = scaler.transform(input_array)
+    return scaled_input
 
+# Endpoint for prediction using Random Forest model
 @app.post("/predict")
-def predict_score(data: InputData):
-    # Convert input to numpy array and standardize it
-    print(data)
-    runs = int(data.runs)
-    wickets = int(data.wickets)
-    overs = float(data.over)
-    striker = int(data.striker)
-    nonStriker = int(data.nonStriker)
-    test_data = np.array([[runs, wickets, overs, striker, nonStriker]])
-    print(test_data)
-    test_data = sc.transform(test_data)
-
-    # Make prediction
-    prediction = reg.predict(test_data)
-    print(prediction)
-
+def predict_with_random_forest(data: InputData):
+    """
+    Predict final cricket score using Random Forest model.
+    """
+    processed_data = preprocess_input(data)
+    prediction = reg_model.predict(processed_data)
     return {"predicted_final_score": prediction[0]}
 
-
+# Endpoint for prediction using Deep Learning (GNN) model
 @app.post("/predict-dll")
-def predict_score(data: InputData):
-    print(data)
-    runs = int(data.runs)
-    wickets = int(data.wickets)
-    overs = float(data.over)
-    striker = int(data.striker)
-    nonStriker = int(data.nonStriker)
-    test_data = np.array([[runs, wickets, overs, striker, nonStriker]])
-    print(test_data)
-    test_data = sc.transform(test_data)
-    prediction = gnn_model.predict(test_data)
-    print(prediction[0][0])
+def predict_with_gnn(data: InputData):
+    """
+    Predict final cricket score using Deep Learning model (GNN).
+    """
+    processed_data = preprocess_input(data)
+    prediction = gnn_model.predict(processed_data)
     return {"predicted_final_score": int(prediction[0][0])}
 
-
-# Run the API using: uvicorn filename:app --reload
+# To run the server, use the command: uvicorn filename:app --reload
